@@ -1,0 +1,9 @@
+[Trigger]
+Operation = Upgrade
+Type = Package
+Target = spicetify-cli
+
+[Action]
+Description = Updating Spotify and re-applying Spicetify after Spicetify upgrade...
+When = PostTransaction
+Exec = /usr/local/bin/spotify-sync.sh
