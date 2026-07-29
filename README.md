@@ -96,6 +96,34 @@ Exec = /usr/local/bin/spotify-sync.sh
 
 **Known caveat:** if the AUR `spotify` package version lags behind what Spicetify expects (or vice versa), `spicetify backup apply` may briefly fail after the hook runs — rerun it manually once versions line up. Nothing breaks permanently; worst case Spotify runs unpatched until then.
 
+### 7. Fixing broken CachyOS mirrors
+Ran into repeated `404` errors on package installs (`cmake`, `libreoffice-fresh`) traced to bad/stale entries in the `znver4`-tier mirrorlist (`/etc/pacman.d/cachyos-v4-mirrorlist`). Eventually every third-party community mirror started 404ing on the same `.db` index files simultaneously — a mirror-pool-wide sync issue, not a local config problem.
+
+**Fix — point directly at CachyOS's own CDN, bypassing the community mirror pool:**
+```
+echo "Server = https://cdn77.cachyos.org/repo/x86_64_v4/\$repo" | sudo tee /etc/pacman.d/cachyos-v4-mirrorlist
+sudo pacman -Syyu
+```
+**Note:** this leaves only a single mirror with no fallback. Worth revisiting later — re-run the official CachyOS repo installer or `rate-mirrors` once the community mirror pool recovers, to rebuild a fuller list with this CDN entry kept as a backup rather than the only source.
+
+### 8. VSCodium for C++ coursework
+```
+yay -S vscodium-bin
+sudo pacman -S gcc gdb cmake make clang
+```
+Extensions installed inside VSCodium (via Open VSX, not the MS marketplace):
+- **clangd** (llvm-vs-code-extensions) — completion, diagnostics, go-to-definition
+- **CodeLLDB** (vadimcn) — debugging/breakpoints
+- **CMake Tools** — for future multi-file/CMake-based projects
+
+Verified working with a throwaway `test.cpp` compiled via `g++ test.cpp -o test && ./test` from VSCodium's integrated terminal.
+
+### 9. LibreOffice
+```
+sudo pacman -S libreoffice-fresh
+```
+Used in place of Microsoft Word/Excel for coursework — reads/writes `.docx`/`.xlsx` natively.
+
 ## Repo structure
 ```
 dotfiles/
@@ -108,6 +136,13 @@ dotfiles/
 └── README.md
 ```
 
+## Resolved / decided against
+- **Laptop fan concern** — turned out to be a non-issue; fan runs correctly under load.
+- **KDE Plasma parallel session** — considered for GPU/PRIME validation, decided not worth the extra maintenance since Hyprland + PRIME already runs fine day-to-day. Lighter one-off validation if ever needed:
+  ```
+  glxinfo | grep "OpenGL renderer"
+  prime-run glxinfo | grep "OpenGL renderer"
+  ```
+
 ## Outstanding / not yet done
-- Laptop fan not spinning up under load — likely an EC/vendor fan-curve issue not exposed to Linux by default. Needs `lm_sensors` investigation and possibly a vendor-specific tool (`asusctl`/`nbfc-linux`/etc. depending on laptop model).
-- KDE Plasma parallel session (considered for GPU validation, not yet installed — SDDM autologin currently left off to keep the session picker available for this).
+- None currently tracked.
