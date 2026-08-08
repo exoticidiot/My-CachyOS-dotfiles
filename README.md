@@ -97,14 +97,27 @@ Exec = /usr/local/bin/spotify-sync.sh
 **Known caveat:** if the AUR `spotify` package version lags behind what Spicetify expects (or vice versa), `spicetify backup apply` may briefly fail after the hook runs — rerun it manually once versions line up. Nothing breaks permanently; worst case Spotify runs unpatched until then.
 
 ### 7. Fixing broken CachyOS mirrors
-Ran into repeated `404` errors on package installs (`cmake`, `libreoffice-fresh`) traced to bad/stale entries in the `znver4`-tier mirrorlist (`/etc/pacman.d/cachyos-v4-mirrorlist`). Eventually every third-party community mirror started 404ing on the same `.db` index files simultaneously — a mirror-pool-wide sync issue, not a local config problem.
+Ran into repeated `404` errors on package installs (`cmake`, `libreoffice-fresh`, later `gcc`, DaVinci Resolve deps) traced to bad/stale/outage-affected entries across the `znver4` and `v4` tier mirrorlists. At times every third-party community mirror (and briefly even `cdn77.cachyos.org` itself) started 404ing on the same `.db` index files simultaneously — a mirror-pool-wide sync/outage issue upstream, not a local config problem. Confirmed via the official status tooling that CachyOS's own build pipeline for a given tier can genuinely stall for days at a time (e.g. `znver4` had no new builds for about a week in late July 2026).
 
-**Fix — point directly at CachyOS's own CDN, bypassing the community mirror pool:**
+**Reliable fix (confirmed working) — clear the local package cache and regenerate mirrors with CachyOS's own official tool, rather than manual edits or the AUR `rate-mirrors`:**
 ```
-echo "Server = https://cdn77.cachyos.org/repo/x86_64_v4/\$repo" | sudo tee /etc/pacman.d/cachyos-v4-mirrorlist
+sudo pacman -Scc
+sudo cachyos-rate-mirrors
 sudo pacman -Syyu
 ```
-**Note:** this leaves only a single mirror with no fallback. Worth revisiting later — re-run the official CachyOS repo installer or `rate-mirrors` once the community mirror pool recovers, to rebuild a fuller list with this CDN entry kept as a backup rather than the only source.
+`pacman -Scc` clears out stale/partial cached files that can cause confusing follow-on errors even after the mirror itself is fixed. `cachyos-rate-mirrors` is CachyOS's maintained mirror-ranking tool (distinct from the generic AUR `rate-mirrors` package) and should be the first thing reached for on any repo/mirror weirdness going forward.
+
+**One-off emergency fallback** (only if `cachyos-rate-mirrors` itself can't be reached, e.g. mid-outage): point directly at CachyOS's own CDN, bypassing the mirror pool entirely:
+```
+echo "Server = https://cdn77.cachyos.org/repo/x86_64_v4/\$repo" | sudo tee /etc/pacman.d/cachyos-v4-mirrorlist
+```
+This leaves a single mirror with no fallback — only use temporarily, and re-run `cachyos-rate-mirrors` once things stabilize to restore a proper multi-mirror list.
+
+**Quick way to check if a specific tier's database is actually being served** (before assuming it's your config):
+```
+curl -sI https://cdn77.cachyos.org/repo/x86_64_v4/cachyos-extra-v4/cachyos-extra-v4.db
+```
+`HTTP/2 200` with a recent `last-modified` = healthy. `404` = genuine upstream outage for that tier, not a local mirror problem — check https://status.cachyos.org/ and CachyOS's Discord `#announcements`/`#updates-repo` for confirmation.
 
 ### 8. VSCodium for C++ coursework
 ```
@@ -123,6 +136,59 @@ Verified working with a throwaway `test.cpp` compiled via `g++ test.cpp -o test 
 sudo pacman -S libreoffice-fresh
 ```
 Used in place of Microsoft Word/Excel for coursework — reads/writes `.docx`/`.xlsx` natively.
+
+### 10. DaVinci Resolve
+Available directly in CachyOS's own repos (`cachyos/davinci-resolve`), no AUR/manual download needed:
+```
+sudo pacman -S davinci-resolve
+```
+Pulls in a Java runtime as a dependency — accept the default provider (`jdk-openjdk`) when prompted. Installation is large (~3.2 GB download, ~7.7 GB installed) so make sure mirrors are healthy first (see mirror troubleshooting above) before starting.
+
+## Hyprland keybinds
+Full current keybind reference, pulled from `~/.config/hypr/default_settings.json`:
+
+**Window management**
+| Shortcut | Action |
+|---|---|
+| `ALT + F4` | Close focused window |
+| `SUPER + SHIFT + F` | Toggle floating mode |
+| `SUPER + CTRL + ←/→/↑/↓` | Move focused window |
+| `SUPER + ←/→/↑/↓` | Move focus |
+| `SUPER + TAB` | Focus next monitor |
+
+**App launching**
+| Shortcut | Action |
+|---|---|
+| `SUPER + RETURN` | Open Kitty |
+| `SUPER + F` | Open Zen Browser (custom rebind, was Firefox) |
+| `SUPER + E` | Open Nautilus |
+| `SUPER + D` | Toggle app launcher |
+
+**Quickshell panel toggles**
+| Shortcut | Panel |
+|---|---|
+| `SUPER + C` | Clipboard manager |
+| `SUPER + P` | Movies |
+| `SUPER + SHIFT + S` | Settings |
+| `SUPER + Q` | Music |
+| `SUPER + B` | Battery |
+| `SUPER + W` | Wallpaper picker |
+| `SUPER + S` | Calendar |
+| `SUPER + N` | Network |
+| `SUPER + SHIFT + T` | Focus timer |
+| `SUPER + V` | Volume |
+| `SUPER + H` | Guide/help overlay |
+
+**Workspaces**
+| Shortcut | Action |
+|---|---|
+| `SUPER + 1–9, 0` | Switch to workspace 1–10 |
+| `SUPER + SHIFT + 1–9, 0` | Move focused window to workspace 1–10 |
+
+**System**
+| Shortcut | Action |
+|---|---|
+| `SUPER + R` | Reload Hyprland config |
 
 ## Repo structure
 ```
