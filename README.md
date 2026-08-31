@@ -1,14 +1,16 @@
 # dotfiles
 
-Personal CachyOS + Hyprland rice setup, built around [ilyamiro](https://github.com/ilyamiro)'s `imperative-dots` (Caelestia-style shell). This repo documents the full setup so it can be reproduced from a bare CachyOS install.
+Personal CachyOS + Hyprland rice setup, built around [ilyamiro](https://github.com/ilyamiro)'s **Serpantinum** shell (formerly distributed as `imperative-dots`/dotfiles for Arch, now a standalone named project — same underlying config, rebranded). This repo documents the full setup so it can be reproduced from a bare CachyOS install.
 
 ## System
 
 - **Distro:** CachyOS (Arch-based)
 - **Compositor:** Hyprland
-- **Shell/UI:** Caelestia-style shell via `imperative-dots`
+- **Kernel:** `linux-cachyos-lts` (switched from mainline `linux-cachyos` — see amdgpu freeze fix below)
+- **Shell/UI:** Serpantinum (ilyamiro) — Lua-based Hyprland config as of the in-app update in August 2026
 - **Login manager:** SDDM with `sddm-astronaut-theme` (japanese_aesthetic variant)
 - **Terminal:** Kitty
+- **Laptop:** HP Victus 15-fb2xxx, BIOS F.08
 - **CPU/GPU:** AMD Ryzen 5 8645HS, hybrid AMD Radeon 760M (iGPU, default) + NVIDIA GeForce (PRIME offload)
 
 ## Setup steps
@@ -22,16 +24,42 @@ Personal CachyOS + Hyprland rice setup, built around [ilyamiro](https://github.c
    sudo pacman -S xdg-desktop-portal-hyprland hyprpolkitagent qt5-wayland qt6-wayland
    ```
 
-### 2. Hyprland dotfiles via imperative-dots
+### 2. Hyprland dotfiles via imperative-dots (original install)
 Ran ilyamiro's Arch-native installer (Nix version was considered and rejected since this isn't a NixOS system):
 ```
 bash -c "$(curl -fsSL https://raw.githubusercontent.com/ilyamiro/imperative-dots/master/install.sh)"
 ```
 - Installed via the `fzf` TUI menu, selecting Hyprland dotfiles, kitty, cava, matugen, etc.
 - Skipped the driver-install step (GPU drivers set up manually to preserve the AMD-default / NVIDIA PRIME offload setup).
-- Config lives at `~/.config/hypr/`, with keybinds and settings driven by `default_settings.json` rather than plain `hyprland.conf`/`hyprland.lua`.
+- Original config lived at `~/.config/hypr/`, with keybinds and settings driven by `default_settings.json` (plain `hyprland.conf`, pre-Lua).
 
-**Note:** Hyprland 0.55+ defaults to a Lua config (`hyprland.lua`) unless a distro/dotfile setup overrides it — this setup uses the JSON-driven config from imperative-dots instead, generated into the actual Hyprland config at runtime.
+### 2a. Migration to Serpantinum / Lua config (August 2026)
+The shell has a built-in **update button in the topbar** — clicking it pulled the current Serpantinum release and **completely restructured the config**, replacing the old JSON-driven files with a native Lua API:
+
+```
+~/.config/hypr/
+├── hyprland.conf       # minimal, mostly delegates to hyprland.lua now
+├── hyprland.lua        # actual active config entrypoint
+└── config/
+    ├── autostart.lua
+    ├── env.lua
+    ├── keybinds.lua    # was keybindings.conf / default_settings.json
+    ├── monitors.lua
+    ├── settings.lua    # was settings.conf
+    └── variables.lua
+```
+
+**⚠️ The update wiped all custom tweaks** (Zen Browser keybind, Num Lock, kitty font size) back to Serpantinum's defaults — it does **not** preserve local edits to the generated config files. Since then, tweaks are re-applied against the new Lua files (below) each time. **Always back up first before hitting that update button:**
+```
+cp -r ~/.config/hypr ~/.config/hypr.backup-$(date +%Y%m%d)
+```
+
+New Lua config uses an `hl.*` API, e.g.:
+```lua
+hl.bind(mainMod .. " + F", hl.dsp.exec_cmd("firefox"))
+hl.config({ input = { kb_layout = "us", ... } })
+```
+Panel commands also changed: old `qs_manager.sh toggle <panel>` → new `serpantinum msg toggle <panel>`. Some panels were renamed/merged in the rewrite (e.g. the old separate "battery" panel is now folded into a broader "system" panel via `SUPER+B`); a few old bindings (movies, dedicated settings, focus timer, next-monitor-focus) aren't present in the new default keybinds — possibly moved inside another panel, not yet confirmed.
 
 ### 3. Login manager — SDDM
 ```
@@ -45,15 +73,69 @@ bash -c "$(curl -fsSL https://raw.githubusercontent.com/keyitdev/sddm-astronaut-
 Theme variant is set via `ConfigFile=Themes/japanese_aesthetic.conf` in the theme's `metadata.desktop`, with `/etc/sddm.conf` pointing `Current=sddm-astronaut-theme`.
 
 ### 4. Keybind tweaks
-Changed `SUPER+F` to launch Zen Browser instead of Firefox by editing `~/.config/hypr/default_settings.json`:
+**Post-Lua-migration versions** (current), edited in `~/.config/hypr/config/keybinds.lua`:
+```
+sed -i 's|hl.dsp.exec_cmd("firefox")|hl.dsp.exec_cmd("zen-browser")|' ~/.config/hypr/config/keybinds.lua
+sed -i 's/mainMod .. " + RETURN"/mainMod .. " + T"/' ~/.config/hypr/config/keybinds.lua
+hyprctl reload
+```
+- `SUPER+F` → Zen Browser instead of Firefox
+- Terminal moved from `SUPER+RETURN` to `SUPER+T` (RETURN stopped working after the Lua migration, possibly a submap remnant from the old config — not fully root-caused, just rebound instead)
+
+Num Lock on by default, added to the `input` table in `~/.config/hypr/config/settings.lua`:
+```
+sed -i '/kb_layout = "us",/a\    numlock_by_default = true,' ~/.config/hypr/config/settings.lua
+```
+
+**Pre-migration versions** (for reference, no longer applicable post-update):
 ```json
 {"type":"bind","mods":"$mainMod","key":"F","dispatcher":"exec","command":"zen-browser"}
 ```
 
-### 5. Discord — Vesktop + ClearVision theme
-Vesktop uses Vencord internally (not BetterDiscord), so ClearVision was added via Vencord's built-in online theme support:
-- Settings → Vencord → Themes → Online Themes
-- Added: `https://raw.githubusercontent.com/ClearVision/ClearVision-v7/master/ClearVision-v7.theme.css`
+### 5. Discord
+**Originally Vesktop + ClearVision theme** (Vesktop uses Vencord internally, not BetterDiscord) — added via Settings → Vencord → Themes → Online Themes → `https://raw.githubusercontent.com/ClearVision/ClearVision-v7/master/ClearVision-v7.theme.css`.
+
+**Switched to plain Discord** (pacman-managed, `/usr/bin/discord`):
+```
+sudo pacman -Rns vesktop
+sudo pacman -S discord
+```
+Attempted to stop the "checking for updates" screen on every launch by adding `"SKIP_HOST_UPDATE": true` to `~/.config/discord/settings.json` — **did not fully suppress it** (still shows the update check/download on launch as of last check). Left as-is for now; not worth chasing further at this time.
+
+### 5a. Laptop freezing — amdgpu `flip_done timed out`
+Diagnosed via `journalctl -b -1 -k` showing a kernel crash trace: `amdgpu 0000:06:00.0: [drm] *ERROR* flip_done timed out` → `acrtc->pflip_status != AMDGPU_FLIP_NONE` warning → crash in `dm_arm_vblank_event`. This is a known, actively-discussed amdgpu display-commit bug (CachyOS forum thread: "Amdgpu flip_done timed out - Display reset"), suspected linked to VRR/FreeSync, affecting various AMD GPU generations across recent kernels.
+
+Mitigations applied (VRR was already off; kernel switch is the main fix being tested):
+```
+sudo pacman -S linux-cachyos-lts linux-cachyos-lts-headers
+sudo pacman -S linux-firmware
+sudo grub-mkconfig -o /boot/grub/grub.cfg
+```
+Rebooted and manually selected **CachyOS Linux LTS** from the GRUB menu. Confirm active kernel:
+```
+uname -r
+```
+**Status: monitoring** — switched kernel, watching for recurrence over the following days before considering it resolved.
+
+### 5b. Num Lock on by default + Bluetooth off by default
+**Num Lock** — two layers, SDDM login screen and Hyprland session:
+```
+# /etc/sddm.conf — added under [General]
+Numlock=on
+```
+```
+# ~/.config/hypr/config/settings.lua — input table
+numlock_by_default = true,
+```
+
+**Bluetooth off at boot** (service stays available, just doesn't auto-power the radio):
+```
+# /etc/bluetooth/main.conf — under [Policy]
+AutoEnable=false
+```
+```
+sudo systemctl restart bluetooth
+```
 
 ### 6. Spotify + Spicetify, version-locked together
 Goal: Spotify should never auto-update on its own — it only updates when Spicetify gets a new release, to avoid Spicetify patches breaking against a newer Spotify build.
@@ -144,8 +226,8 @@ sudo pacman -S davinci-resolve
 ```
 Pulls in a Java runtime as a dependency — accept the default provider (`jdk-openjdk`) when prompted. Installation is large (~3.2 GB download, ~7.7 GB installed) so make sure mirrors are healthy first (see mirror troubleshooting above) before starting.
 
-## Hyprland keybinds
-Full current keybind reference, pulled from `~/.config/hypr/default_settings.json`:
+## Hyprland keybinds (current, post-Lua-migration)
+Pulled from `~/.config/hypr/config/keybinds.lua` as of the Serpantinum update. **Note:** this file gets reset to defaults every time the topbar update button is used — back up first, then re-diff/reapply custom binds after updating.
 
 **Window management**
 | Shortcut | Action |
@@ -154,30 +236,44 @@ Full current keybind reference, pulled from `~/.config/hypr/default_settings.jso
 | `SUPER + SHIFT + F` | Toggle floating mode |
 | `SUPER + CTRL + ←/→/↑/↓` | Move focused window |
 | `SUPER + ←/→/↑/↓` | Move focus |
-| `SUPER + TAB` | Focus next monitor |
+| `SUPER + SHIFT + ←/→/↑/↓` | Resize focused window |
+| `SUPER + mouse-drag` / `SUPER + mouse-right-drag` | Drag / resize window with mouse |
+| 3-finger swipe (touchpad) | Switch workspace |
 
 **App launching**
 | Shortcut | Action |
 |---|---|
-| `SUPER + RETURN` | Open Kitty |
-| `SUPER + F` | Open Zen Browser (custom rebind, was Firefox) |
+| `SUPER + T` | Open Kitty (rebound from `SUPER+RETURN`, which stopped working after the Lua migration) |
+| `SUPER + F` | Open Zen Browser (custom rebind, default is Firefox) |
 | `SUPER + E` | Open Nautilus |
 | `SUPER + D` | Toggle app launcher |
 
-**Quickshell panel toggles**
+**Serpantinum panel toggles** (`serpantinum msg toggle <panel>`)
 | Shortcut | Panel |
 |---|---|
 | `SUPER + C` | Clipboard manager |
-| `SUPER + P` | Movies |
-| `SUPER + SHIFT + S` | Settings |
 | `SUPER + Q` | Music |
-| `SUPER + B` | Battery |
+| `SUPER + B` | System (was separate "battery" panel pre-migration — merged) |
 | `SUPER + W` | Wallpaper picker |
 | `SUPER + S` | Calendar |
 | `SUPER + N` | Network |
-| `SUPER + SHIFT + T` | Focus timer |
 | `SUPER + V` | Volume |
 | `SUPER + H` | Guide/help overlay |
+
+**Not present in the new default keybinds** (existed pre-migration; possibly moved inside another panel, not yet confirmed): movies panel, dedicated settings panel (separate from system), focus timer, next-monitor-focus (`SUPER+TAB`).
+
+**Media / power / screenshots** (new since migration)
+| Shortcut | Action |
+|---|---|
+| `SUPER + SPACE` / `XF86AudioPlay` / `XF86AudioPause` | Play/pause media |
+| `XF86AudioMute` / `XF86AudioMicMute` | Mute speaker / mic |
+| `XF86AudioRaiseVolume` / `XF86AudioLowerVolume` | Volume up/down |
+| `XF86MonBrightnessUp` / `XF86MonBrightnessDown` | Brightness up/down |
+| `Print` | Screenshot (region) |
+| `SHIFT + Print` | Screenshot (region, edit) |
+| `SUPER + Print` | Screenshot (full) |
+| `SUPER + SHIFT + Print` | Screenshot (full, edit) |
+| `SUPER + L` / `XF86PowerOff` | Lock screen |
 
 **Workspaces**
 | Shortcut | Action |
@@ -188,19 +284,27 @@ Full current keybind reference, pulled from `~/.config/hypr/default_settings.jso
 **System**
 | Shortcut | Action |
 |---|---|
-| `SUPER + R` | Reload Hyprland config |
+| `SUPER + R` | Reload (`serpantinum reload`) |
 
 ## Repo structure
 ```
-dotfiles/
-├── hypr/               # Hyprland config (default_settings.json, session files)
-├── kitty/              # Kitty terminal config
+My-CachyOS-dotfiles/     # renamed from "dotfiles", made public (Aug 2026)
+├── hypr/                # Hyprland config — now Lua (hyprland.lua, config/*.lua)
+├── kitty/               # Kitty terminal config
 ├── scripts/
 │   ├── spotify-sync.sh
 │   └── spicetify-sync.hook
-├── sddm/               # SDDM theme config notes
+├── sddm/                # SDDM theme config notes
 └── README.md
 ```
+Repo visibility switched from private → public, and renamed from `dotfiles` to `My-CachyOS-dotfiles` (GitHub converts spaces to hyphens in the slug). Local remote updated accordingly:
+```
+git remote set-url origin https://github.com/exoticidiot/My-CachyOS-dotfiles.git
+```
+
+## Other repos
+- **[Book-Library-Management-System](https://github.com/exoticidiot/Book-Library-Management-System)** — console C++ library management app (structs/arrays, ISBN-13 validation). Replaced the leftover assignment-brief README with real usage docs; added About description + topics.
+- **[Minesweeper](https://github.com/exoticidiot/Minesweeper)** — console C++ Minesweeper (2D arrays, no classes/pointers). Fixed a README bug where the run instructions referenced the wrong filename (`minesweeper.cpp` vs actual `Minesweeper Game.cpp`); added About description + topics.
 
 ## Resolved / decided against
 - **Laptop fan concern** — turned out to be a non-issue; fan runs correctly under load.
@@ -211,4 +315,7 @@ dotfiles/
   ```
 
 ## Outstanding / not yet done
-- None currently tracked.
+- **Discord "checking for updates" screen on launch** — `SKIP_HOST_UPDATE: true` in `~/.config/discord/settings.json` did not suppress it. Not investigated further yet.
+- **amdgpu freeze fix (LTS kernel)** — applied, monitoring for recurrence before considering resolved.
+- **Serpantinum panel migration** — confirm whether movies/dedicated-settings/focus-timer panels moved inside the new "system" panel or were dropped entirely.
+- **Serpantinum topbar update button** — wipes all custom config edits on every use (confirmed by experience). Always back up `~/.config/hypr` first: `cp -r ~/.config/hypr ~/.config/hypr.backup-$(date +%Y%m%d)`.
