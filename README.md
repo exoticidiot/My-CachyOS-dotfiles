@@ -226,6 +226,37 @@ sudo pacman -S davinci-resolve
 ```
 Pulls in a Java runtime as a dependency — accept the default provider (`jdk-openjdk`) when prompted. Installation is large (~3.2 GB download, ~7.7 GB installed) so make sure mirrors are healthy first (see mirror troubleshooting above) before starting.
 
+### 11. User management
+Change own password:
+```
+passwd
+```
+Add a new user (with sudo access via `wheel` group, fish as default shell):
+```
+sudo useradd -m -G wheel -s /usr/bin/fish username
+sudo passwd username
+```
+Confirm `wheel` is enabled for sudo (uncomment in `sudo visudo` if needed: `%wheel ALL=(ALL:ALL) ALL`). New users automatically show up on the SDDM login screen — no extra config needed.
+
+Delete a user (keeps home dir by default; `-r` removes it too):
+```
+sudo userdel username        # keeps /home/username
+sudo userdel -r username     # full removal
+```
+
+### 12. SDDM virtual keyboard removal
+The astronaut theme setup enabled `qtvirtualkeyboard` as an input method, which caused an on-screen keyboard to pop up automatically on the login screen — not needed on a laptop with a physical keyboard. Traced to `/etc/sddm.conf.d/virtualkbd.conf`; removed entirely:
+```
+sudo rm /etc/sddm.conf.d/virtualkbd.conf
+```
+
+### 13. fastfetch — expanded system info
+Serpantinum ships a minimal custom fastfetch config (`~/.config/fastfetch/config.jsonc`) showing just OS/CPU/RAM/shell. Expanded it using fastfetch's built-in interactive generator rather than hand-editing JSON:
+```
+fastfetch --gen-config
+```
+This launches a TUI module picker (`↑/↓` move, `Space` toggle, `s`/`Enter` save) — selected kernel, uptime, packages, host, display, WM, theme/cursor/icons/fonts, CPU cache, both GPUs, disk, battery, local IP, and colors, in addition to the original set. Config lives at `~/.config/fastfetch/config.jsonc`; safe to re-run `--gen-config` any time to adjust the module list.
+
 ## Hyprland keybinds (current, post-Lua-migration)
 Pulled from `~/.config/hypr/config/keybinds.lua` as of the Serpantinum update. **Note:** this file gets reset to defaults every time the topbar update button is used — back up first, then re-diff/reapply custom binds after updating.
 
@@ -316,6 +347,6 @@ git remote set-url origin https://github.com/exoticidiot/My-CachyOS-dotfiles.git
 
 ## Outstanding / not yet done
 - **Discord "checking for updates" screen on launch** — `SKIP_HOST_UPDATE: true` in `~/.config/discord/settings.json` did not suppress it. Not investigated further yet.
-- **amdgpu freeze fix (LTS kernel)** — applied, monitoring for recurrence before considering resolved.
+- **amdgpu freeze fix (LTS kernel)** — confirmed running `6.18.48-1-cachyos-lts` via `fastfetch`/`uname -r`; no freezes recurred since the switch. Still monitoring before fully marking resolved.
 - **Serpantinum panel migration** — confirm whether movies/dedicated-settings/focus-timer panels moved inside the new "system" panel or were dropped entirely.
 - **Serpantinum topbar update button** — wipes all custom config edits on every use (confirmed by experience). Always back up `~/.config/hypr` first: `cp -r ~/.config/hypr ~/.config/hypr.backup-$(date +%Y%m%d)`.
